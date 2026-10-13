@@ -88,6 +88,16 @@ fn missing_prerequisites(skill: &Path) -> Vec<String> {
     missing
 }
 
+/// Create the run directory, write the role into it and return its absolute path. pi runs with
+/// that directory as its cwd, so a relative `--out` would leave pi looking for `out/out/ROLE.md`,
+/// and pi treats a missing `--append-system-prompt` file as literal text.
+fn prepare_out(out: &Path) -> std::io::Result<PathBuf> {
+    fs::create_dir_all(out)?;
+    let out = std::path::absolute(out)?;
+    fs::write(out.join("ROLE.md"), ROLE)?;
+    Ok(out)
+}
+
 fn which(tool: &str) -> Option<PathBuf> {
     let exts = if cfg!(windows) { vec![".cmd", ".exe", ""] } else { vec![""] };
     env::split_paths(&env::var_os("PATH")?)
@@ -126,15 +136,19 @@ fn main() -> ExitCode {
         eprintln!("rea-agent: {} already has a REPORT.md; use a new --out", out.display());
         return ExitCode::from(2);
     }
-    let role = out.join("ROLE.md");
+    let out = match prepare_out(&out) {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!("rea-agent: could not prepare {}: {e}", out.display());
+            return ExitCode::from(1);
+        }
+    };
     let log = out.join("agent.log");
-    let started = fs::create_dir_all(&out)
-        .and_then(|_| fs::write(&role, ROLE))
-        .and_then(|_| fs::File::create(&log))
+    let started = fs::File::create(&log)
         .and_then(|log_file| {
             let pi = which("pi").expect("checked above");
             Command::new(pi)
-                .args(pi_args(&skill, &role, &brief, model.as_deref()))
+                .args(pi_args(&skill, &out.join("ROLE.md"), &brief, model.as_deref()))
                 .current_dir(&out)
                 .stdout(log_file.try_clone()?)
                 .stderr(log_file)
@@ -180,6 +194,16 @@ mod tests {
         assert!(parse(&args("run a.md b.md --out o")).is_err());
         assert!(parse(&args("check extra")).is_err());
         assert!(parse(&[]).is_err());
+    }
+
+    #[test]
+    fn relative_out_becomes_absolute_so_pi_finds_the_role_from_inside_it() {
+        let rel = PathBuf::from(format!("target/rel-out-test-{}", std::process::id()));
+        let out = prepare_out(&rel).unwrap();
+        assert!(out.is_absolute());
+        assert_eq!(out, env::current_dir().unwrap().join(&rel));
+        assert!(out.join("ROLE.md").is_file());
+        fs::remove_dir_all(&out).unwrap();
     }
 
     #[test]
