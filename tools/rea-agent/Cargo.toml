@@ -1,0 +1,8 @@
+[package]
+name = "rea-agent"
+version = "0.1.0"
+edition = "2024"
+description = "Start a dedicated pi agent that answers a brief with REA evidence"
+publish = false
+
+[workspace]
