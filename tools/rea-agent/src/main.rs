@@ -124,16 +124,14 @@ fn prepare_out(out: &Path) -> std::io::Result<PathBuf> {
     fs::create_dir_all(out.join(".pi"))?;
     let out = std::path::absolute(out)?;
     fs::write(out.join("ROLE.md"), ROLE)?;
-    let env: Vec<(&str, String)> =
-        REQUIRED_ENV.iter().map(|k| (*k, env::var(k).unwrap_or_default())).collect();
-    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let env = REQUIRED_ENV.map(|k| (k, env::var(k).unwrap_or_default()));
     fs::write(out.join(".pi/mcp.json"), mcp_json(&env))?;
     Ok(out)
 }
 
 /// Project MCP config for the run directory: one long-lived `rea --mcp` server, so Ghidra imports
 /// the target once per `open_binary` instead of once per CLI call (about 3 minutes each).
-fn mcp_json(env: &[(&str, &str)]) -> String {
+fn mcp_json(env: &[(&str, String)]) -> String {
     let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
     let env = env.iter().map(|(k, v)| format!("\"{k}\": \"{}\"", esc(v))).collect::<Vec<_>>().join(", ");
     let direct = DIRECT_TOOLS.map(|t| format!("\"{t}\": \"direct\"")).join(", ");
@@ -243,7 +241,7 @@ mod tests {
 
     #[test]
     fn mcp_config_names_the_rea_server_with_escaped_env_and_direct_core_tools() {
-        let env = [("JAVA_HOME", r#"C:\Program Files\jdk "x""#)];
+        let env = [("JAVA_HOME", r#"C:\Program Files\jdk "x""#.to_string())];
         let json = mcp_json(&env);
         assert!(json.contains(r#""command": "rea""#));
         assert!(json.contains(r#""args": ["--mcp"]"#));
