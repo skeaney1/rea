@@ -14,6 +14,13 @@ use std::process::{Command, ExitCode};
 const ROLE: &str = include_str!("../role.md");
 const USAGE: &str = "usage: rea-agent run <brief.md> --out <dir> [--model <pattern>]\n       rea-agent check";
 const REQUIRED_ENV: [&str; 3] = ["GHIDRA_INSTALL_DIR", "JAVA_HOME", "REA_ANALYSIS_PROVIDER"];
+/// REA tools declared to the model; the other ~190 stay reachable through tool_search.
+const DIRECT_TOOLS: [&str; 16] = [
+    "open_binary", "binary_session", "binary_overview", "close_binary", "search_strings",
+    "search_procedures", "procedure_pseudo_code", "analyze_function", "xrefs", "find_xrefs_to_name",
+    "procedure_callers", "procedure_callees", "read_function_instructions", "read_bytes",
+    "inspect_analysis_view", "inspect_rust_binary",
+];
 
 #[derive(Debug, PartialEq)]
 enum Cli {
@@ -56,7 +63,9 @@ fn skill_dir() -> PathBuf {
 
 fn pi_args(skill: &Path, role: &Path, brief: &Path, model: Option<&str>) -> Vec<String> {
     let mut args: Vec<String> = [
-        "--print", "--no-session", "--no-skills", "--tools", "read,bash,write,edit,grep,find,ls",
+        "--print", "--no-session", "--no-skills", "--approve",
+        // pi drops direct MCP tools from a --tools allowlist that names no mcp__ entry.
+        "--tools", "read,bash,write,edit,grep,find,ls,tool_search,mcp__rea__*",
     ]
     .map(String::from)
     .to_vec();
@@ -92,10 +101,46 @@ fn missing_prerequisites(skill: &Path) -> Vec<String> {
 /// that directory as its cwd, so a relative `--out` would leave pi looking for `out/out/ROLE.md`,
 /// and pi treats a missing `--append-system-prompt` file as literal text.
 fn prepare_out(out: &Path) -> std::io::Result<PathBuf> {
-    fs::create_dir_all(out)?;
+    if out.join("agent.log").exists() {
+        return Err(std::io::Error::other(format!(
+            "{} holds agent.log from another run; use a fresh --out",
+            out.display()
+        )));
+    }
+    // pi runs with --approve, which trusts everything in <out>/.pi (extensions, settings, prompts),
+    // so a reused or planted run directory must hold nothing there but the config we write.
+    if let Ok(entries) = fs::read_dir(out.join(".pi")) {
+        for entry in entries {
+            let name = entry?.file_name();
+            if name != "mcp.json" {
+                return Err(std::io::Error::other(format!(
+                    "{} holds .pi/{}; use a fresh --out",
+                    out.display(),
+                    name.to_string_lossy()
+                )));
+            }
+        }
+    }
+    fs::create_dir_all(out.join(".pi"))?;
     let out = std::path::absolute(out)?;
     fs::write(out.join("ROLE.md"), ROLE)?;
+    let env: Vec<(&str, String)> =
+        REQUIRED_ENV.iter().map(|k| (*k, env::var(k).unwrap_or_default())).collect();
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    fs::write(out.join(".pi/mcp.json"), mcp_json(&env))?;
     Ok(out)
+}
+
+/// Project MCP config for the run directory: one long-lived `rea --mcp` server, so Ghidra imports
+/// the target once per `open_binary` instead of once per CLI call (about 3 minutes each).
+fn mcp_json(env: &[(&str, &str)]) -> String {
+    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+    let env = env.iter().map(|(k, v)| format!("\"{k}\": \"{}\"", esc(v))).collect::<Vec<_>>().join(", ");
+    let direct = DIRECT_TOOLS.map(|t| format!("\"{t}\": \"direct\"")).join(", ");
+    format!(
+        "{{\"mcpServers\": {{\"rea\": {{\"command\": \"rea\", \"args\": [\"--mcp\"], \"timeout\": 1800, \
+         \"env\": {{{env}}}, \"exposure\": \"deferred\", \"toolExposure\": {{{direct}}}}}}}}}\n"
+    )
 }
 
 fn which(tool: &str) -> Option<PathBuf> {
@@ -197,12 +242,43 @@ mod tests {
     }
 
     #[test]
+    fn mcp_config_names_the_rea_server_with_escaped_env_and_direct_core_tools() {
+        let env = [("JAVA_HOME", r#"C:\Program Files\jdk "x""#)];
+        let json = mcp_json(&env);
+        assert!(json.contains(r#""command": "rea""#));
+        assert!(json.contains(r#""args": ["--mcp"]"#));
+        assert!(json.contains(r#""JAVA_HOME": "C:\\Program Files\\jdk \"x\"""#));
+        assert!(json.contains(r#""open_binary": "direct""#));
+        assert!(json.contains(r#""exposure": "deferred""#));
+    }
+
+    #[test]
+    fn refuses_an_out_dir_whose_pi_folder_holds_anything_but_our_mcp_json() {
+        let out = PathBuf::from(format!("target/planted-out-test-{}", std::process::id()));
+        fs::create_dir_all(out.join(".pi/extensions")).unwrap();
+        let err = prepare_out(&out).unwrap_err();
+        assert!(err.to_string().contains("extensions"), "{err}");
+        assert!(!out.join(".pi/mcp.json").exists(), "nothing written before the refusal");
+        fs::remove_dir_all(&out).unwrap();
+    }
+
+    #[test]
+    fn refuses_an_out_dir_another_run_has_started_in() {
+        let out = PathBuf::from(format!("target/started-out-test-{}", std::process::id()));
+        fs::create_dir_all(&out).unwrap();
+        fs::write(out.join("agent.log"), "").unwrap();
+        assert!(prepare_out(&out).unwrap_err().to_string().contains("agent.log"));
+        fs::remove_dir_all(&out).unwrap();
+    }
+
+    #[test]
     fn relative_out_becomes_absolute_so_pi_finds_the_role_from_inside_it() {
         let rel = PathBuf::from(format!("target/rel-out-test-{}", std::process::id()));
         let out = prepare_out(&rel).unwrap();
         assert!(out.is_absolute());
         assert_eq!(out, env::current_dir().unwrap().join(&rel));
         assert!(out.join("ROLE.md").is_file());
+        assert!(out.join(".pi/mcp.json").is_file());
         fs::remove_dir_all(&out).unwrap();
     }
 
@@ -215,5 +291,8 @@ mod tests {
         assert_eq!(at("--append-system-prompt"), "R");
         assert!(a.contains(&"@B".to_string()));
         assert!(!a.contains(&"--model".to_string()));
+        assert!(a.contains(&"--approve".to_string()), "print mode cannot prompt for project trust");
+        assert!(at("--tools").contains("tool_search"), "deferred REA tools need tool_search");
+        assert!(at("--tools").contains("mcp__rea__*"), "direct REA tools must survive the allowlist");
     }
 }

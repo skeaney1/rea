@@ -319,6 +319,11 @@ as complete while required questions remain open.
 
 - Native binaries, managed assemblies, archives, and extraction:
   [references/native-and-artifacts.md](references/native-and-artifacts.md)
+- Reading decompiler output, start-up code, switches, calling conventions, and
+  what imports and strings prove:
+  [references/reading-native-code.md](references/reading-native-code.md)
+- Comparing builds, auditing for memory-safety bugs, and packed samples:
+  [references/diffing-auditing-unpacking.md](references/diffing-auditing-unpacking.md)
 - ASARs, extracted JavaScript, feature tracing, and version comparison:
   [references/javascript-applications.md](references/javascript-applications.md)
 - Android APK declarations, classes, methods, and static references:

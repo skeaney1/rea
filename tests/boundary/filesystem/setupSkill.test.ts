@@ -335,6 +335,8 @@ describe("canonical skill transaction", () => {
     for (const reference of [
       "connection-and-recovery.md",
       "native-and-artifacts.md",
+      "reading-native-code.md",
+      "diffing-auditing-unpacking.md",
       "javascript-applications.md",
       "android-applications.md",
       "runtime-observation.md",
@@ -394,6 +396,8 @@ describe("canonical skill transaction", () => {
       "references/evidence-workflows.md",
       "references/javascript-applications.md",
       "references/native-and-artifacts.md",
+      "references/reading-native-code.md",
+      "references/diffing-auditing-unpacking.md",
       "references/runtime-observation.md",
     ];
     const records = await Promise.all(

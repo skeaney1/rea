@@ -22,6 +22,8 @@ export const MANAGED_SKILL_FILES = [
   "SKILL.md",
   "references/connection-and-recovery.md",
   "references/native-and-artifacts.md",
+  "references/reading-native-code.md",
+  "references/diffing-auditing-unpacking.md",
   "references/javascript-applications.md",
   "references/android-applications.md",
   "references/runtime-observation.md",
