@@ -322,6 +322,8 @@ as complete while required questions remain open.
 - Reading decompiler output, start-up code, switches, calling conventions, and
   what imports and strings prove:
   [references/reading-native-code.md](references/reading-native-code.md)
+- ARM64 (AArch64) registers, prologues, address formation, and kernel code:
+  [references/reading-arm64.md](references/reading-arm64.md)
 - Comparing builds, auditing for memory-safety bugs, and packed samples:
   [references/diffing-auditing-unpacking.md](references/diffing-auditing-unpacking.md)
 - ASARs, extracted JavaScript, feature tracing, and version comparison:

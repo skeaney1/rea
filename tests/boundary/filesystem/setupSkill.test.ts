@@ -336,6 +336,7 @@ describe("canonical skill transaction", () => {
       "connection-and-recovery.md",
       "native-and-artifacts.md",
       "reading-native-code.md",
+      "reading-arm64.md",
       "diffing-auditing-unpacking.md",
       "javascript-applications.md",
       "android-applications.md",
@@ -397,6 +398,7 @@ describe("canonical skill transaction", () => {
       "references/javascript-applications.md",
       "references/native-and-artifacts.md",
       "references/reading-native-code.md",
+      "references/reading-arm64.md",
       "references/diffing-auditing-unpacking.md",
       "references/runtime-observation.md",
     ];
