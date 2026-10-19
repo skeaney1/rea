@@ -1,0 +1,8 @@
+cases/**
+!cases/.gitkeep
+!cases/*/
+!cases/*/NOTES.md
+!cases/*/REPORT.md
+*.bndb
+*.gpr
+*.rep/
